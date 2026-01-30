@@ -6,21 +6,39 @@ FROM n8nio/n8n:latest
 # Switch to root for installations
 USER root
 
-# Install system dependencies (optimized for Alpine Linux)
-RUN apk update && \
-    apk add --no-cache \
-        ffmpeg \
-        python3 \
-        py3-pip \
-        curl \
-        wget \
-        bash \
-    && rm -rf /var/cache/apk/*
+# Detect and install system dependencies for both Alpine and Debian-based systems
+RUN if command -v apk > /dev/null 2>&1; then \
+        # Alpine Linux
+        apk update && \
+        apk add --no-cache \
+            ffmpeg \
+            python3 \
+            py3-pip \
+            curl \
+            wget \
+            bash \
+        && rm -rf /var/cache/apk/*; \
+    elif command -v apt-get > /dev/null 2>&1; then \
+        # Debian/Ubuntu
+        apt-get update && \
+        apt-get install -y --no-install-recommends \
+            ffmpeg \
+            python3 \
+            python3-pip \
+            curl \
+            wget \
+            bash \
+        && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*; \
+    else \
+        echo "Unsupported package manager"; \
+        exit 1; \
+    fi
 
 # Install yt-dlp via pip (more reliable than binary download)
-RUN pip3 install --no-cache-dir --upgrade \
+RUN python3 -m pip install --no-cache-dir --upgrade \
+    pip \
     yt-dlp \
-    && pip3 cache purge
+    && python3 -m pip cache purge
 
 # Create application directories with proper permissions
 RUN mkdir -p /data/temp /app/temp \
@@ -49,7 +67,7 @@ ENV NODE_ENV=production \
 
 # Health check optimized for Render.com
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD wget --quiet --tries=1 --spider --timeout=10 http://localhost:5678/healthz || exit 1
+    CMD curl -f http://localhost:5678/healthz || exit 1
 
 # Expose port
 EXPOSE 5678
